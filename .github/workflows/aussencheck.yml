@@ -1,0 +1,139 @@
+# Außencheck: prüft den wall3-Server von AUSSEN (GitHub-Rechner, nicht der
+# Server selbst und nicht der PC). Fällt der ganze Server aus, kann Kuma auf
+# ihm nichts mehr melden - dieser Lauf schon: schlägt er fehl, schickt GitHub
+# automatisch eine Mail an den Repo-Besitzer.
+#
+# Seit 14.11.2026 in diesem ÖFFENTLICHEN Repo (vorher Tillixx/wall3-gamepanel):
+# öffentliche Repos haben unbegrenzt freie Actions-Minuten, im privaten Repo war
+# das Monatskontingent (2000 min) aufgebraucht und GitHub startete keine Läufe mehr.
+# Deshalb: Server-IP und Portlisten nur als Secrets (SERVER_IP, ERWARTET, PORTS),
+# Logs/Zusammenfassung sind öffentlich -> Portscan nennt nur Anzahlen, keine
+# Bildschirmfotos/Traces als Artefakt (die wären öffentlich herunterladbar).
+#
+# Halbstündlich: alle Seiten antworten (kein 000/5xx), Zertifikate > 14 Tage,
+# Mailserver grüßt auf Port 25. Durchklick mit echtem Browser (durchklick.mjs,
+# seiten.json) -> Kuma-Push-Monitor "Durchklick (außen)". Nachts (02:xx UTC)
+# zusätzlich die Ablauf-Tests aus ablaeufe.json.
+# Sonntags 03:xx UTC zusätzlich: Portscan gegen die erwartete Liste und
+# Sicherheits-Header je Seite (nur Bericht).
+name: Außencheck
+
+on:
+  schedule:
+    - cron: "17,47 * * * *"
+  workflow_dispatch:
+    inputs:
+      voll:
+        description: "Portscan + Header jetzt mitprüfen"
+        type: boolean
+        default: false
+      ablaeufe:
+        description: "Ablauf-Tests (sonst nur nachts) jetzt mitprüfen"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  pruefen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      # Als Secrets, weil das Repo öffentlich ist
+      SERVER_IP: ${{ secrets.SERVER_IP }}
+      ERWARTET: ${{ secrets.ERWARTET }}
+      PORTS: ${{ secrets.PORTS }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: aussencheck
+      # Durchklick (seit 2026-10-30): echte Browser-Pruefung der Start-/Login-Seiten
+      # (Texte sichtbar, keine Fehlerseite, keine brechenden Skriptfehler, CSS geladen).
+      # Meldet an den Kuma-Push-Monitor "Durchklick (aussen)" erst nach zweitem Fehlschlag
+      # im Abstand von 75 s; der Lauf selbst bleibt dabei gruen (sonst Mail je Stoerung).
+      # Chrome ist auf dem GitHub-Rechner schon installiert -> nur playwright-core (~10 MB).
+      # Startet im Hintergrund und laeuft parallel zur curl-Pruefung: so bleibt der Lauf
+      # meist unter einer Minute (GitHub rechnet je angefangene Minute ab).
+      - name: Durchklick starten (echter Browser, im Hintergrund)
+        env:
+          DURCHKLICK_PUSH: ${{ secrets.DURCHKLICK_PUSH }}
+        run: |
+          cd aussencheck
+          npm install --no-save --no-audit --no-fund --ignore-scripts --loglevel=error playwright-core@1.64.1
+          # Ablauf-Tests (ablaeufe.json) nur im Lauf um 02:xx UTC oder per Handstart mit "ablaeufe"
+          if [ "${{ inputs.ablaeufe }}" = "true" ] || [ "$(date -u +%H)" = "02" ]; then export DURCHKLICK_ABLAEUFE=1; fi
+          nohup node durchklick.mjs > durchklick.log 2>&1 &
+          echo $! > durchklick.pid
+      - name: Seiten, Zertifikate, Mail
+        run: |
+          fehler=0
+          echo "## Seiten" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Seite | Status | Zertifikat |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          while read -r host; do
+            [ -z "$host" ] || [ "${host:0:1}" = "#" ] && continue
+            # Kennung im User-Agent: der Server sieht daran im Zugriffsprotokoll, dass dieser
+            # Lauf stattfand (aussencheck-waechter.js meldet, wenn er 3 h ausbleibt)
+            code=$(curl -s -o /dev/null -w '%{http_code}' -A "Wall3-Aussencheck/1" --max-time 20 "https://$host/" || true)
+            # Seit 14.11.2026: Einzelaussetzer (Zeitueberschreitung/5xx) -> nach 20 s noch einmal;
+            # erst der zweite Fehlschlag zaehlt (13.11. zweimal rot durch je einen Einzelausfall).
+            if [ "$code" = "000" ] || [ "${code:0:1}" = "5" ]; then
+              sleep 20
+              code=$(curl -s -o /dev/null -w '%{http_code}' -A "Wall3-Aussencheck/1" --max-time 20 "https://$host/" || true)
+            fi
+            # Zertifikat direkt am Server lesen, nicht bei Cloudflare (seit 25.10.2026 liegen die
+            # meisten Seiten hinter dem Cloudflare-Proxy – dessen Zertifikat erneuert Cloudflare
+            # selbst; laeuft das Let's-Encrypt-Zertifikat am Server ab, kommt sonst nur Fehler 526).
+            ende=$(echo | timeout 15 openssl s_client -servername "$host" -connect "$SERVER_IP:443" 2>/dev/null | openssl x509 -noout -enddate 2>/dev/null | cut -d= -f2)
+            tage="?"
+            [ -n "$ende" ] && tage=$(( ( $(date -d "$ende" +%s) - $(date +%s) ) / 86400 ))
+            zeichen="ok"
+            if [ "$code" = "000" ] || [ "${code:0:1}" = "5" ]; then zeichen="FEHLER"; fehler=1; fi
+            if [ "$tage" = "?" ] || [ "$tage" -lt 14 ]; then zeichen="FEHLER"; fehler=1; fi
+            echo "| $host | $code | $tage Tage | $zeichen" >> "$GITHUB_STEP_SUMMARY"
+            echo "$host: HTTP $code, Zertifikat $tage Tage - $zeichen"
+          done < aussencheck/seiten.txt
+          gruss=$(timeout 15 bash -c "exec 3<>/dev/tcp/$SERVER_IP/25; read -t 10 -r z <&3; echo \"\$z\"" 2>/dev/null | tr -d '\r' || true)
+          # wie oben: ein Aussetzer zaehlt erst beim zweiten Versuch
+          if [[ "$gruss" != 220* ]]; then sleep 20; gruss=$(timeout 15 bash -c "exec 3<>/dev/tcp/$SERVER_IP/25; read -t 10 -r z <&3; echo \"\$z\"" 2>/dev/null | tr -d '\r' || true); fi
+          if [[ "$gruss" == 220* ]]; then echo "Mail Port 25: ok"; else echo "Mail Port 25: keine Begrüßung ($gruss)"; fehler=1; fi
+          echo "" >> "$GITHUB_STEP_SUMMARY"; echo "Mail Port 25: ${gruss:-keine Antwort}" >> "$GITHUB_STEP_SUMMARY"
+          exit $fehler
+      - name: Durchklick (Ergebnis)
+        if: always()
+        run: |
+          cd aussencheck
+          pid=$(cat durchklick.pid 2>/dev/null || true)
+          while [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; do sleep 1; done
+          cat durchklick.log 2>/dev/null || true
+          [ -f zusammenfassung.md ] && cat zusammenfassung.md >> "$GITHUB_STEP_SUMMARY"
+          # ergebnis.json fehlt nur, wenn das Skript abgestuerzt ist -> dann soll der Lauf rot werden
+          test -f bilder/ergebnis.json
+      - name: Portscan (sonntags)
+        if: always()
+        run: |
+          if [ "${{ inputs.voll }}" != "true" ] && { [ "$(date -u +%u)" != "7" ] || [ "$(date -u +%H)" != "03" ]; }; then echo "nur sonntags 03 UTC"; exit 0; fi
+          offen=""
+          for p in $PORTS; do
+            timeout 3 bash -c "exec 3<>/dev/tcp/$SERVER_IP/$p" 2>/dev/null && offen="$offen $p"
+          done
+          unerwartet=0; fehlt=0
+          for p in $offen; do [[ " $ERWARTET " == *" $p "* ]] || unerwartet=$((unerwartet+1)); done
+          for p in $ERWARTET; do [[ " $offen " == *" $p "* ]] || fehlt=$((fehlt+1)); done
+          # Repo ist öffentlich: nur Anzahlen. Welche Ports: am Server nachsehen.
+          { echo "## Portscan"; echo "unerwartet offen: $unerwartet"; echo ""; echo "erwartet, aber zu: $fehlt"; } >> "$GITHUB_STEP_SUMMARY"
+          echo "unerwartet offen: $unerwartet, erwartet aber zu: $fehlt"
+          [ "$unerwartet" = 0 ]
+      - name: Sicherheits-Header (sonntags, nur Bericht)
+        if: always()
+        run: |
+          if [ "${{ inputs.voll }}" != "true" ] && { [ "$(date -u +%u)" != "7" ] || [ "$(date -u +%H)" != "03" ]; }; then exit 0; fi
+          { echo "## Sicherheits-Header"; echo "| Seite | HSTS | nosniff | Frame-Schutz | Referrer |"; echo "|---|---|---|---|---|"; } >> "$GITHUB_STEP_SUMMARY"
+          while read -r host; do
+            [ -z "$host" ] || [ "${host:0:1}" = "#" ] && continue
+            h=$(curl -s -D - -o /dev/null -A "Wall3-Aussencheck/1" --max-time 20 "https://$host/" | tr 'A-Z' 'a-z')
+            j() { grep -q "$1" <<<"$h" && echo ja || echo "**fehlt**"; }
+            rahmen=$(grep -qE "x-frame-options|frame-ancestors" <<<"$h" && echo ja || echo "**fehlt**")
+            echo "| $host | $(j strict-transport-security) | $(j 'x-content-type-options: nosniff') | $rahmen | $(j referrer-policy) |" >> "$GITHUB_STEP_SUMMARY"
+          done < aussencheck/seiten.txt

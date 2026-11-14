@@ -1,0 +1,28 @@
+{
+  "_hinweis": "Seiten der Durchklick-Pruefung (durchklick.mjs). texte = muss sichtbar sein (Teilstring, Gross/Klein egal), element = CSS-Selektor, der sichtbar sein muss. Nur oeffentliche Start-/Login-Seiten, keine Anmeldung. Bewusst NICHT dabei: games.wall3.de (Gamepanel nur als Desktop-App, Web-Wurzel 404), tx (Spielserver), dav (mTLS), auth.wall3.de (im Aufbau).",
+  "seiten": [
+    { "name": "wall3.de", "url": "https://wall3.de/", "texte": ["Mit Discord anmelden", "Levelsystem"] },
+    { "name": "status (Login)", "url": "https://status.wall3.de/dashboard", "texte": ["Anmelden"], "element": "input[type=password]" },
+    { "name": "status (DOJ-Statusseite)", "url": "https://status.wall3.de/status/doj", "texte": ["Department of Justice", "Haftrechner"] },
+    { "name": "onboarding (Justizportal)", "url": "https://onboarding.wall3.de/", "texte": ["Justizportal", "Mit Discord anmelden"] },
+    { "name": "onboarding /verify", "url": "https://onboarding.wall3.de/verify", "texte": ["Echtheit prüfen", "Arbeiten"], "element": "input" },
+    { "name": "doj.wall3.de", "url": "https://doj.wall3.de/", "texte": ["Department of Justice", "Offene Stellen"] },
+    { "name": "justice", "url": "https://justice.wall3.de/", "texte": ["Justiz-Portal", "Mit Discord anmelden"] },
+    { "name": "doj-personal", "url": "https://doj-personal.wall3.de/", "texte": ["Personalverwaltung", "Mit Discord anmelden"] },
+    { "name": "beweismittel", "url": "https://beweismittel.wall3.de/", "texte": ["Beweismittelarchiv", "Mit Discord anmelden"] },
+    { "name": "informant (FIB)", "url": "https://informant.wall3.de/", "texte": ["Informanten-Portal", "Mit Discord anmelden"] },
+    { "name": "scpd", "url": "https://scpd.wall3.de/", "texte": ["Senora City Police Department", "Mit Discord anmelden"] },
+    { "name": "scpd-informant", "url": "https://scpd-informant.wall3.de/", "texte": ["Informanten-Portal", "Vertrauliche Quellenführung"] },
+    { "name": "informant.scpd (alte Adresse)", "url": "https://informant.scpd.wall3.de/", "texte": ["Informanten-Portal"] },
+    { "name": "haftrechner", "url": "https://haftrechner.wall3.de/", "texte": ["Haftrechner", "Neue Akte"] },
+    { "name": "scadmin", "url": "https://scadmin.wall3.de/", "texte": ["SC-Admin", "Mit Discord anmelden"] },
+    { "name": "fv (Punktesystem)", "url": "https://fv.wall3.de/", "texte": ["Punkte verdienen", "Login"] },
+    { "name": "scba (Anwaltsregister)", "url": "https://scba.wall3.de/", "texte": ["Anwaltsregister", "Anmelden"] },
+    { "name": "scsd", "url": "https://scsd.wall3.de/", "texte": ["Sheriff", "Mit Discord anmelden"] },
+    { "name": "usms", "url": "https://usms.wall3.de/", "texte": ["Marshals Service", "Mit Discord anmelden"] },
+    { "name": "shisha", "url": "https://shisha.wall3.de/", "texte": ["Shishabar", "Getränke"], "serifErlaubt": true },
+    { "name": "weazel", "url": "https://weazel.wall3.de/", "texte": ["Weazel News", "Reporter-Login"] },
+    { "name": "mail.reptilehub.de", "url": "https://mail.reptilehub.de/", "texte": ["Wall3 Mail", "Einloggen"], "element": "input[type=password]" },
+    { "name": "reptilehub.de", "url": "https://reptilehub.de/", "texte": ["Willkommen zurück", "Anmelden"], "element": "input[type=password]" }
+  ]
+}

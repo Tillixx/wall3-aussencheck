@@ -1,0 +1,20 @@
+# Seiten, die der Außencheck stündlich prüft (eine je Zeile)
+wall3.de
+status.wall3.de
+onboarding.wall3.de
+doj.wall3.de
+justice.wall3.de
+doj-personal.wall3.de
+beweismittel.wall3.de
+informant.wall3.de
+scpd.wall3.de
+informant.scpd.wall3.de
+haftrechner.wall3.de
+scadmin.wall3.de
+fv.wall3.de
+scba.wall3.de
+scsd.wall3.de
+usms.wall3.de
+shisha.wall3.de
+weazel.wall3.de
+mail.reptilehub.de
